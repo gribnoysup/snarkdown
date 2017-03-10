@@ -22,7 +22,15 @@ function encodeAttr(str) {
 
 /** Parse Markdown into an HTML String. */
 export default function parse(md) {
-	let tokenizer = /((?:^|\n+)(?:\n---+|\* \*(?: \*)+)\n)|(?:^```(\w*)\n([\s\S]*?)\n```$)|((?:(?:^|\n+)(?:\t|  {2,}).+)+\n*)|((?:(?:^|\n)([>*+-]|\d+\.)\s+.*)+)|(?:\!\[([^\]]*?)\]\(([^\)]+?)\))|(\[)|(\](?:\(([^\)]+?)\))?)|(?:(?:^|\n+)([^\s].*)\n(\-{3,}|={3,})(?:\n+|$))|(?:(?:^|\n+)(#{1,3})\s*(.+)(?:\n+|$))|(?:`([^`].*?)`)|(  \n\n*|\n{2,}|__|\*\*|[_*])/gm,
+	// 0. changed heading regex to (?:(?:^|\n+)(#{1,3})\s*(.+)(?=\n+|$)) from
+	// 		(?:(?:^|\n+)(#{1,3})\s*(.+)(?:\n+|$)), headings must be followed by newline,
+	//    not include it
+	// 1. Changed newline in the eol of --- regexp to $
+	// 2. Removed newlines from inline formatting tokens
+	// 3. Added paragraph regexp group (?:([\s\S]+?)(?:\n{2,}))
+
+	let tokenizer = /((?:^|\n+)(?:---+|\* \*(?: \*)+)$)|(?:^```(\w*)\n([\s\S]*?)\n```$)|((?:(?:^|\n+)(?:\t|  {2,}).+)+\n*)|((?:(?:^|\n)([>*+-]|\d+\.)\s+.*)+)|(?:\!\[([^\]]*?)\]\(([^\)]+?)\))|(\[)|(\](?:\(([^\)]+?)\))?)|(?:(?:^|\n+)([^\s].*)\n(\-{3,}|={3,})(?:\n+|$))|(?:(?:^|\n+)(#{1,3})\s*(.+)(?=\n+|$))|(?:`([^`].*?)`)|(__|\*\*|[_*])|(?:([\s\S]+?)(?:\n{2,}))/gm,
+	// let tokenizer = /((?:^|\n+)(?:\n---+|\* \*(?: \*)+)\n)|(?:^```(\w*)\n([\s\S]*?)\n```$)|((?:(?:^|\n+)(?:\t|  {2,}).+)+\n*)|((?:(?:^|\n)([>*+-]|\d+\.)\s+.*)+)|(?:\!\[([^\]]*?)\]\(([^\)]+?)\))|(\[)|(\](?:\(([^\)]+?)\))?)|(?:(?:^|\n+)([^\s].*)\n(\-{3,}|={3,})(?:\n+|$))|(?:(?:^|\n+)(#{1,3})\s*(.+)(?:\n+|$))|(?:`([^`].*?)`)|(  \n\n*|\n{2,}|__|\*\*|[_*])/gm,
 		context = [],
 		out = '',
 		last = 0,
@@ -44,15 +52,19 @@ export default function parse(md) {
 		return str;
 	}
 
-	md = md.replace(/^\n+|\n+$/g, '').replace(/^\[(.+?)\]:\s*(.+)$/gm, (s, name, url) => {
+	// 1. Moved replace of newlines after urls
+	// 		(because url parsing could create urls at the bottom of string)
+
+	md = md.replace(/^\[(.+?)\]:\s*(.+)$/gm, (s, name, url) => {
 		links[name.toLowerCase()] = url;
 		return '';
-	});
+	}).replace(/^\n+|\n+$/g, '');
 
 	while ( (token=tokenizer.exec(md)) ) {
 		prev = md.substring(last, token.index);
 		last = tokenizer.lastIndex;
 		chunk = token[0];
+
 		if (prev.match(/[^\\](\\\\)*\\$/)) {
 			// escaped
 		}
@@ -99,6 +111,11 @@ export default function parse(md) {
 		else if (token[17] || token[1]) {
 			chunk = tag(token[17] || '--');
 		}
+		// Paragraphs
+		else if (token[18] && token[18].trim()) {
+			chunk = '<p>' + parse(token[18].trim()) + '</p>';
+		}
+
 		out += prev;
 		out += chunk;
 	}
